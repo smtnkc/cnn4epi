@@ -1,5 +1,29 @@
 import h5py
 import numpy as np
+import pandas as pd
+
+
+def create_fasta_files_from_csv(cell_line):
+    """
+    Splits CSV of EP fragment pairs and creates two fasta files
+    Arguments: cell_line -- Folder of CSV file including the balanced fragments of EP sequences
+    Returns: -
+    """
+    df_frag_pairs_balanced = pd.read_csv("data/{}/frag_pairs_balanced.csv".format(cell_line))
+    df_enh_frags = df_frag_pairs_balanced.drop_duplicates(subset=['enhancer_name'])[['enhancer_name', 'enhancer_seq']].reset_index(drop=True)
+    df_pro_frags = df_frag_pairs_balanced.drop_duplicates(subset=['promoter_name'])[['promoter_name', 'promoter_seq']].reset_index(drop=True)
+ 
+    enh_fa = open('data/{}/enhancers.fa'.format(cell_line), 'w')
+    for i in range(len(df_enh_frags)):
+        enh_fa.write(">{}\n".format(df_enh_frags['enhancer_name'][i]))
+        enh_fa.write("{}\n".format(df_enh_frags['enhancer_seq'][i]))
+    enh_fa.close()
+
+    pro_fa = open('data/{}/promoters.fa'.format(cell_line), 'w')
+    for i in range(len(df_pro_frags)):
+        pro_fa.write(">{}\n".format(df_pro_frags['promoter_name'][i]))
+        pro_fa.write("{}\n".format(df_pro_frags['promoter_seq'][i]))
+    pro_fa.close()
 
 
 def parse_fasta_seq(seq_file):
@@ -89,8 +113,8 @@ def split_dataset(one_hot, labels, test_frac = 0.1):
 
 def fasta_data_loader(pro_fa, enh_fa):
 
-    pos_f = open('data/US_UU/K562_US.fa')
-    neg_f = open('data/US_UU/K562_UU.fa')
+    pos_f = open(pro_fa)
+    neg_f = open(enh_fa)
 
     pos = parse_fasta_seq(pos_f)
     neg = parse_fasta_seq(neg_f)
