@@ -2,7 +2,7 @@
 CNN model for Enhancer-Promoter Classification
 
 ```bash
-python cnn.py --cell_line='GM12878' --balanced=True --seed=42
+python main.py --cell_line='GM12878' --balanced=True --seed=42
 ```
 
 ## References
