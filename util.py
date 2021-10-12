@@ -3,23 +3,26 @@ import numpy as np
 import pandas as pd
 
 
-def create_fasta_files_from_csv(cell_line):
+def create_fasta_files_from_csv(args):
     """
     Splits CSV of EP fragment pairs and creates two fasta files
-    Arguments: cell_line -- Folder of CSV file including the balanced fragments of EP sequences
+    Arguments: cell_line -- Folder of CSV file including fragments of EP sequences
     Returns: -
     """
-    df_frag_pairs_balanced = pd.read_csv("data/{}/frag_pairs_balanced.csv".format(cell_line))
-    df_enh_frags = df_frag_pairs_balanced.drop_duplicates(subset=['enhancer_name'])[['enhancer_name', 'enhancer_seq']].reset_index(drop=True)
-    df_pro_frags = df_frag_pairs_balanced.drop_duplicates(subset=['promoter_name'])[['promoter_name', 'promoter_seq']].reset_index(drop=True)
+    frag_path = 'data/{}/frag_pairs{}.csv'.format(args.cell_line, '_balanced' if args.balanced else '')
+    df_frag_pairs = pd.read_csv(frag_path)
+    df_frag_pairs = df_frag_pairs[['enhancer_frag_name', 'enhancer_frag_seq', 'promoter_frag_name', 'promoter_frag_seq']]
+    df_frag_pairs.columns = ['enhancer_name', 'enhancer_seq', 'promoter_name', 'promoter_seq']
+    df_enh_frags = df_frag_pairs.drop_duplicates(subset=['enhancer_name'])[['enhancer_name', 'enhancer_seq']].reset_index(drop=True)
+    df_pro_frags = df_frag_pairs.drop_duplicates(subset=['promoter_name'])[['promoter_name', 'promoter_seq']].reset_index(drop=True)
  
-    enh_fa = open('data/{}/enhancers.fa'.format(cell_line), 'w')
+    enh_fa = open('data/{}/enhancers.fa'.format(args.cell_line), 'w')
     for i in range(len(df_enh_frags)):
         enh_fa.write(">{}\n".format(df_enh_frags['enhancer_name'][i]))
         enh_fa.write("{}\n".format(df_enh_frags['enhancer_seq'][i]))
     enh_fa.close()
 
-    pro_fa = open('data/{}/promoters.fa'.format(cell_line), 'w')
+    pro_fa = open('data/{}/promoters.fa'.format(args.cell_line), 'w')
     for i in range(len(df_pro_frags)):
         pro_fa.write(">{}\n".format(df_pro_frags['promoter_name'][i]))
         pro_fa.write("{}\n".format(df_pro_frags['promoter_seq'][i]))
