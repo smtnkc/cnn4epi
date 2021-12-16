@@ -1,25 +1,33 @@
 import os
+import warnings
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+warnings.filterwarnings('ignore')
+
 import argparse
 import random
 import numpy as np
+import pandas as pd
+import tensorflow as tf
 import tensorflow.keras as ks
 import matplotlib.pyplot as plt
-import pandas as pd
+
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
 from tqdm import tqdm
 from datetime import datetime
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import roc_curve, auc
+from util import fasta_data_loader
 
-from util import fasta_data_loader, create_fasta_files_from_csv
-
-def cnn_model(params):
+def cnn_model():
 
     model = ks.Sequential()
 
     model.add(ks.layers.Conv1D(
                 input_shape = (X_train.shape[1], X_train.shape[2]),
                 filters = 90,
-                kernel_size = params['f1_size'],
+                kernel_size = 19,
                 padding = 'same',
                 activation = ks.activations.relu))
 
@@ -61,13 +69,13 @@ def cnn_model(params):
     return model
 
 
-def cross_validation(params):
+def cross_validation(seed):
 
-    kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=7)
+    kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
     total_auc = []
-    model = cnn_model(params)
+    model = cnn_model()
 
-    for train, test in kfold.split(X_train, Y_train):      
+    for train, test in kfold.split(X_train, Y_train):
         history = model.fit(x=X_train[train],
                             y=Y_train[train],
                             validation_data = (X_train[test], Y_train[test]),
@@ -81,18 +89,17 @@ def cross_validation(params):
             if key.startswith('val_auc_'):
                 valid_auc = history.history[key][-1]
 
-        test_loss, test_auc = model.evaluate(X_test, Y_test, verbose = 0)
+        _, test_auc = model.evaluate(X_test, Y_test, verbose = 0)
         mean_auc = (train_auc + valid_auc + test_auc)/3
         total_auc.append(mean_auc)
 
     return model, total_auc
 
 
-def best_model(args):
+def best_model(seed):
 
-    params = {'f1_size': 19}
-    model = cnn_model(params)
-    kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=args.seed)
+    model = cnn_model()
+    kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
 
     i = 0
     tprs = []
@@ -137,7 +144,7 @@ def best_model(args):
     return model, tprs 
 
 
-def plot_roc_curve(tprs, args):
+def plot_roc_curve(tprs, cell_line, cross_cell_line):
 
     mean_tprs, mean_pred_tprs, mean_test_tprs = tprs[0:4], tprs[5], tprs[6]
     mean_fpr = np.linspace(0, 1, 100)
@@ -157,29 +164,40 @@ def plot_roc_curve(tprs, args):
 
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title('ROC curve of CNN-10(90) model for {}'.format(args.cell_line))
+    plt.title('ROC curve of CNN-10(90) model for {}'.format(cell_line))
     plt.legend(loc='lower right')
-    plt.savefig('results/{}_roc.png'.format(args.cell_line))
+    if cross_cell_line == None or (cell_line == cross_cell_line):
+        plt.savefig('results/{}_roc.png'.format(cell_line))
+    else:
+        plt.savefig('results/{}_roc.png'.format(cell_line + '_' + cross_cell_line))
     # plt.show()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='bert4epi')
-    parser.add_argument('--cell_line', default='GM12878', type=str) # GM12878, HUVEC, HeLa-S3, IMR90, K562, NHEK, combined
+    parser.add_argument('--cell_line', default='GM12878', type=str) # GM12878, HUVEC, HeLa-S3, K562, combined
+    parser.add_argument('--cross_cell_line', default=None, type=str) # GM12878, HUVEC, HeLa-S3, K562
     parser.add_argument('--seed', default=42, type=int)
-    parser.add_argument('--balanced', default=True, type=bool)
     args = parser.parse_args()
     random.seed(args.seed)
 
     if args.cell_line == 'US_UU':
-        train, test = fasta_data_loader(pro_fa='data/US_UU/K562_US.fa', enh_fa='data/US_UU/K562_UU.fa')
+        train, test = fasta_data_loader(pro_fa='data/US_UU/K562_US.fa',
+                                        enh_fa='data/US_UU/K562_UU.fa', seed=args.seed)
     elif args.cell_line == 'CAGE':
         train, test = fasta_data_loader(pro_fa='data/CAGE/fantom_promoters_600.fa',
-                                        enh_fa='data/CAGE/fantom_enhancers_600.fa')
+                                        enh_fa='data/CAGE/fantom_enhancers_600.fa', seed=args.seed)
     else:
-        create_fasta_files_from_csv(args)
         train, test = fasta_data_loader(pro_fa='data/{}/enhancers.fa'.format(args.cell_line),
-                                        enh_fa='data/{}/promoters.fa'.format(args.cell_line))
+                                        enh_fa='data/{}/promoters.fa'.format(args.cell_line), seed=args.seed)
+
+        if args.cross_cell_line == None or (args.cell_line == args.cross_cell_line):
+            print('TESTING ON SAME CELL-LINE ({})'.format(args.cell_line))
+        else:
+            # Overwrite test data as 20% of cross cell-line
+            print('TESTING ON CROSS CELL-LINE ({})'.format(args.cross_cell_line))
+            _, test = fasta_data_loader(pro_fa='data/{}/enhancers.fa'.format(args.cross_cell_line),
+                                        enh_fa='data/{}/promoters.fa'.format(args.cross_cell_line), seed=args.seed)
 
     # Reshape the data to (n_samples, n_seqs, n_channels)
     X_train,Y_train = train[0].transpose([0,2,1]),train[1]
@@ -192,9 +210,6 @@ if __name__ == "__main__":
     print ("X_test shape: " + str(X_test.shape))
     print ("Y_test shape: " + str(Y_test.shape))
 
-    params = {'f1_size': 10}
-    test_model = cnn_model(params)
-    test_model.summary()
-
-    cnn_model, tprs = best_model(args)
-    plot_roc_curve(tprs, args)
+    model, tprs = best_model(args.seed)
+    model.summary()
+    plot_roc_curve(tprs, args.cell_line, args.cross_cell_line)
