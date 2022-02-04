@@ -7,7 +7,7 @@ warnings.filterwarnings('ignore')
 import argparse
 import random
 import numpy as np
-import pandas as pd
+import time
 import tensorflow as tf
 import tensorflow.keras as ks
 import matplotlib.pyplot as plt
@@ -210,6 +210,10 @@ if __name__ == "__main__":
     print ("X_test shape: " + str(X_test.shape))
     print ("Y_test shape: " + str(Y_test.shape))
 
+    t1 = time.time()
     model, tprs = best_model(args.seed)
     model.summary()
+    t2= time.time()
+    print('\n\n\n')
+    print('{}TIME = {:.5f}{}'.format('\n'*3, t2 - t1, '\n'*3))
     plot_roc_curve(tprs, args.cell_line, args.cross_cell_line)
