@@ -1,0 +1,14 @@
+Cell-line                  = K562
+Cross Cell-line            = None
+Random seed                = 42
+Total size                 = 2554
+Training size              = 1635
+Validation size            = 408
+Test size                  = 511
+Train epochs               = 40
+Train batch size           = 30
+Total Execution Time       = 96.87722
+Mean Train F1              = 0.92694
+Mean Validation F1         = 0.77279
+Mean Test F1               = 0.77601
+Mean Test Confusion        = [[165.0, 95.0], [31.4, 219.6]]

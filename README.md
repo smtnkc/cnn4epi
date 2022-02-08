@@ -15,3 +15,5 @@ python3 main.py --cell_line='GM12878' --cross_cell_line='K562'
 **Zeng et al. (2021)**: https://www.frontiersin.org/articles/10.3389/fgene.2021.681259/full
 
 **TargetFinder:** https://github.com/shwhalen/targetfinder
+
+**NeptuneBlogs:** https://neptune.ai/blog/implementing-the-macro-f1-score-in-keras

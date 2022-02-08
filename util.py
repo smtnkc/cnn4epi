@@ -1,4 +1,30 @@
 import numpy as np
+import keras.backend as K
+
+def custom_f1(y_true, y_pred):
+    '''
+    Implementing F1 score in Keras
+    https://neptune.ai/blog/implementing-the-macro-f1-score-in-keras
+    https://github.com/YiLi225/NeptuneBlogs/blob/main/Implement_F1score_neptune_git_NewVersion.py
+    '''
+
+    def recall_m(y_true, y_pred):
+        TP = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        Positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+        
+        recall = TP / (Positives+K.epsilon())    
+        return recall 
+
+    def precision_m(y_true, y_pred):
+        TP = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        Pred_Positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+    
+        precision = TP / (Pred_Positives+K.epsilon())
+        return precision 
+
+    precision, recall = precision_m(y_true, y_pred), recall_m(y_true, y_pred)
+
+    return 2*((precision*recall)/(precision+recall+K.epsilon()))
 
 
 def parse_fasta_seq(seq_file):
@@ -66,20 +92,18 @@ def split_dataset(one_hot, labels, seed, test_frac = 0.2):
     """
     Split the dataset into training and test set
     """
-    def split_index(num_data, test_frac):
+    def split_index(num_data, test_frac, seed):
 
         train_frac = 1 - test_frac
         cum_index = np.array(np.cumsum([0,train_frac,test_frac])*num_data).astype(int)
-        np.random.seed(seed)
-        shuffle = np.random.permutation(num_data)
+        shuffle = np.random.RandomState(seed=seed).permutation(num_data)
         train_index = shuffle[cum_index[0]:cum_index[1]]
         test_index =shuffle[cum_index[1]:cum_index[2]]
 
         return train_index, test_index
 
     num_data = len(one_hot)
-    train_index, test_index = split_index(num_data, test_frac)
-
+    train_index, test_index = split_index(num_data, test_frac, seed)
     train = (one_hot[train_index],labels[train_index,:])
     test = (one_hot[test_index],labels[test_index,:])
     indices = [train_index,test_index]

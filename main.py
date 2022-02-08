@@ -8,17 +8,17 @@ import argparse
 import random
 import numpy as np
 import time
+import logging
 import tensorflow as tf
 import tensorflow.keras as ks
 import matplotlib.pyplot as plt
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-from tqdm import tqdm
 from datetime import datetime
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import roc_curve, auc
-from util import fasta_data_loader
+from sklearn.metrics import f1_score, confusion_matrix
+from util import custom_f1, fasta_data_loader
 
 def cnn_model():
 
@@ -64,113 +64,79 @@ def cnn_model():
     model.compile(
                 optimizer=ks.optimizers.Adam(learning_rate= 0.0003,decay=1e-6),
                 loss = ks.losses.BinaryCrossentropy(),
-                metrics= [ks.metrics.AUC()])
+                metrics= [custom_f1, 'accuracy'])
 
     return model
 
 
-def cross_validation(seed):
+def cv_run(X_train, Y_train, X_test, Y_test, n_splits, seed, epochs, batch_size):
 
-    kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
-    total_auc = []
-    model = cnn_model()
+    tf.random.set_seed(seed)
+    np.random.seed(seed)
 
-    for train, test in kfold.split(X_train, Y_train):
-        history = model.fit(x=X_train[train],
-                            y=Y_train[train],
-                            validation_data = (X_train[test], Y_train[test]),
-                            batch_size= 30,
-                            epochs=40,
-                            verbose=0)
+    kfold = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+    tr_f1_scores = []
+    val_f1_scores = []
+    test_f1_scores = []
+    test_confusions = []
 
-        for key in history.history.keys():
-            if key.startswith('auc_'):
-                train_auc = history.history[key][-1]
-            if key.startswith('val_auc_'):
-                valid_auc = history.history[key][-1]
+    t1= time.time()
+    for k, (tr_inds, val_inds) in enumerate(kfold.split(X_train, Y_train)):
 
-        _, test_auc = model.evaluate(X_test, Y_test, verbose = 0)
-        mean_auc = (train_auc + valid_auc + test_auc)/3
-        total_auc.append(mean_auc)
+        print('\n---- Fold {} ----'.format(k+1))
+        print('{} training, {} validation'.format(len(tr_inds), len(val_inds)))
 
-    return model, total_auc
+        model = cnn_model()
+        X_tr, Y_tr = X_train[tr_inds], Y_train[tr_inds]
+        X_val, Y_val = X_train[val_inds], Y_train[val_inds]
 
+        model.fit(x=X_tr, y=Y_tr, batch_size=batch_size, epochs=epochs, verbose=0)
 
-def best_model(seed):
+        Y_tr_pred = model.predict(X_tr)
+        Y_tr_pred_cat = (np.asarray(Y_tr_pred)).round()
 
-    model = cnn_model()
-    kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
+        Y_val_pred = model.predict(X_val)
+        Y_val_pred_cat = (np.asarray(Y_val_pred)).round()
 
-    i = 0
-    tprs = []
-    auc_total = []
-    tprs_pred_total = []
-    tprs_test_total = []
+        ### Get performance metrics after each fold
+        tr_f1 = f1_score(Y_tr, Y_tr_pred_cat)
+        print("Train F1 = {:.5f}".format(tr_f1))
+        tr_f1_scores.append(tr_f1)
 
-    mean_fpr = np.linspace(0, 1, 100)
+        val_f1 = f1_score(Y_val, Y_val_pred_cat)
+        print("Valid F1 = {:.5f}".format(val_f1))
+        val_f1_scores.append(val_f1)
 
-    for train, test in tqdm(kfold.split(X_train, Y_train), total=kfold.get_n_splits(), desc="k-fold"):
-        model.fit(
-                x=X_train[train],
-                y=Y_train[train],
-                batch_size= 30,
-                epochs= 40,
-                verbose=0)
+        ### Run testing after each fold
+        Y_test_pred = model.predict(X_test, batch_size=batch_size).round()
+        confusion = confusion_matrix(Y_test, Y_test_pred)
+        test_f1 = f1_score(Y_test, Y_test_pred)
+        test_f1_scores.append(test_f1)
+        test_confusions.append(confusion)
+        print('Test F1 = {:.5f}'.format(test_f1))
+        print('Test confusion = {}'.format(confusion.tolist()))
 
-        y_pred = model.predict(X_train[test]).ravel()
-        fpr_pred, tpr_pred, _ = roc_curve(Y_train[test], y_pred)
-        tprs_pred = np.interp(mean_fpr, fpr_pred, tpr_pred)
-        tprs_pred[0] = 0.0
-        tprs_pred_total.append(tprs_pred)
+    t2= time.time()
+    total_exec_time = t2 - t1
+    mean_tr_f1 = np.mean(tr_f1_scores)
+    mean_val_f1 = np.mean(val_f1_scores)
+    mean_test_f1 = np.mean(test_f1_scores)
+    mean_test_conf = np.mean(test_confusions, axis=0)
 
-        y_test_pred = model.predict(X_test).ravel()
-        test_fpr,test_tpr, _ = roc_curve(Y_test, y_test_pred)
-        tprs_test = np.interp(mean_fpr, test_fpr, test_tpr)
-        tprs_test[0] = 0.0
-        tprs_test_total.append(tprs_test)
+    print('{}\nTotal Execution Time = {:.5f} seconds'.format('-'*20, total_exec_time))
+    print('Mean Train F1 score = {:.5f}'.format(mean_tr_f1))
+    print('Mean Val F1 score = {:.5f}'.format(mean_val_f1))
+    print('Mean Test F1 score = {:.5f}'.format(mean_test_f1))
+    print('Mean Test Confusion = {}\n{}\n'.format(np.mean(test_confusions, axis=0).tolist(), '-'*20))
 
-        mean_tprs = (tprs_pred + tprs_test)/2
-        tprs.append(mean_tprs)
-        # mean_auc = auc(mean_fpr, mean_tprs)
-        # auc_total.append(mean_auc)
-        # print(mean_auc)
-
-    tprs_pred_mean = np.mean(tprs_pred_total, axis = 0)
-    tprs_test_mean = np.mean(tprs_test_total, axis = 0)
-
-    tprs.append(tprs_pred_mean)
-    tprs.append(tprs_test_mean)
-
-    return model, tprs 
-
-
-def plot_roc_curve(tprs, cell_line, cross_cell_line):
-
-    mean_tprs, mean_pred_tprs, mean_test_tprs = tprs[0:4], tprs[5], tprs[6]
-    mean_fpr = np.linspace(0, 1, 100)
-
-    mean_tpr = np.mean(mean_tprs, axis=0)
-    mean_tpr[-1] = 1.0
-
-    mean_auc = auc(mean_fpr,mean_tpr)
-    mean_pred_auc = auc(mean_fpr, mean_pred_tprs)
-    mean_test_auc = auc(mean_fpr, mean_test_tprs)
-
-    plt.figure(1)
-    plt.plot([-0.05, 1], [-0.05, 1], 'k--')
-    plt.plot(mean_fpr,mean_tpr,color='b',label='Mean ROC (AUC=%0.5f)' % mean_auc,lw=2,alpha=.8)
-    plt.plot(mean_fpr,mean_pred_tprs,color='r',label='Mean Train ROC (AUC=%0.5f)' % mean_pred_auc,lw=2,alpha=.8)
-    plt.plot(mean_fpr,mean_test_tprs,color='y',label='Mean Test ROC (AUC=%0.5f)' % mean_test_auc,lw=2,alpha=.8)
-
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('ROC curve of CNN-10(90) model for {}'.format(cell_line))
-    plt.legend(loc='lower right')
-    if cross_cell_line == None or (cell_line == cross_cell_line):
-        plt.savefig('results/{}_roc.png'.format(cell_line))
-    else:
-        plt.savefig('results/{}_roc.png'.format(cell_line + '_' + cross_cell_line))
-    # plt.show()
+    stats = {
+        'time' : total_exec_time,
+        'tr_f1': mean_tr_f1,
+        'val_f1': mean_val_f1,
+        'test_f1': mean_test_f1,
+        'test_conf': mean_test_conf
+    }
+    return stats
 
 
 if __name__ == "__main__":
@@ -192,28 +158,58 @@ if __name__ == "__main__":
                                         enh_fa='data/{}/promoters.fa'.format(args.cell_line), seed=args.seed)
 
         if args.cross_cell_line == None or (args.cell_line == args.cross_cell_line):
-            print('TESTING ON SAME CELL-LINE ({})'.format(args.cell_line))
+            print('\nTESTING ON SAME CELL-LINE ({})'.format(args.cell_line))
         else:
             # Overwrite test data as 20% of cross cell-line
-            print('TESTING ON CROSS CELL-LINE ({})'.format(args.cross_cell_line))
+            print('\nTESTING ON CROSS CELL-LINE ({})'.format(args.cross_cell_line))
             _, test = fasta_data_loader(pro_fa='data/{}/enhancers.fa'.format(args.cross_cell_line),
                                         enh_fa='data/{}/promoters.fa'.format(args.cross_cell_line), seed=args.seed)
 
     # Reshape the data to (n_samples, n_seqs, n_channels)
-    X_train,Y_train = train[0].transpose([0,2,1]),train[1]
-    X_test,Y_test = test[0].transpose([0,2,1]),test[1]
+    X_train, Y_train = train[0].transpose([0,2,1]),train[1]
+    X_test, Y_test = test[0].transpose([0,2,1]),test[1]
 
-    print("number of training examples = " + str(X_train.shape[0]))
-    print ("number of test examples = " + str(X_test.shape[0]))
-    print ("X_train shape: " + str(X_train.shape))
-    print ("Y_train shape: " + str(Y_train.shape))
-    print ("X_test shape: " + str(X_test.shape))
-    print ("Y_test shape: " + str(Y_test.shape))
+    print("X_train shape: " + str(X_train.shape))
+    print("Y_train shape: " + str(Y_train.shape))
+    print("X_test shape: " + str(X_test.shape))
+    print("Y_test shape: " + str(Y_test.shape))
 
-    t1 = time.time()
-    model, tprs = best_model(args.seed)
-    model.summary()
-    t2= time.time()
-    print('\n\n\n')
-    print('{}TIME = {:.5f}{}'.format('\n'*3, t2 - t1, '\n'*3))
-    plot_roc_curve(tprs, args.cell_line, args.cross_cell_line)
+    EPOCHS = 40
+    BATCH_SIZE = 30
+    N_SPLITS = 5
+
+    val_size = int(X_train.shape[0]*(1/N_SPLITS))
+    train_size = X_train.shape[0] - val_size
+    test_size = X_test.shape[0]
+
+    stats = cv_run(X_train, Y_train, X_test, Y_test, n_splits=N_SPLITS,
+                   seed=args.seed, epochs=EPOCHS, batch_size=BATCH_SIZE)
+
+    ### LOGS
+
+    log_dir = "results/{}".format(args.seed)
+    if not os.path.isdir(log_dir):
+        os.makedirs(log_dir)
+
+    if args.cross_cell_line == None or args.cross_cell_line == args.cell_line:
+        log_name = '{}/{}'.format(log_dir, args.cell_line)
+    else:
+        log_name = '{}/{}'.format(log_dir, args.cell_line + '_' + args.cross_cell_line)
+
+    log_file = "{}.txt".format(log_name)
+    open(log_file, 'w').close() # clear file content
+    logging.basicConfig(format='%(message)s', filename=log_file,level=logging.DEBUG)
+    logging.info("Cell-line                  = {}".format(args.cell_line))
+    logging.info("Cross Cell-line            = {}".format(args.cross_cell_line))
+    logging.info("Random seed                = {}".format(args.seed))
+    logging.info("Total size                 = {}".format(train_size + val_size + test_size))
+    logging.info("Training size              = {}".format(train_size))
+    logging.info("Validation size            = {}".format(val_size))
+    logging.info("Test size                  = {}".format(test_size))
+    logging.info("Train epochs               = {}".format(EPOCHS))
+    logging.info("Train batch size           = {}".format(BATCH_SIZE))
+    logging.info("Total Execution Time       = {:.5f}".format(stats['time']))
+    logging.info("Mean Train F1              = {:.5f}".format(stats['tr_f1']))
+    logging.info("Mean Validation F1         = {:.5f}".format(stats['val_f1']))
+    logging.info("Mean Test F1               = {:.5f}".format(stats['test_f1']))
+    logging.info("Mean Test Confusion        = {}".format(stats['test_conf'].tolist()))
