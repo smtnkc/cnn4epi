@@ -1,5 +1,6 @@
 import numpy as np
 import keras.backend as K
+from sklearn.model_selection import train_test_split
 
 def custom_f1(y_true, y_pred):
     '''
@@ -70,7 +71,7 @@ def dna_to_one_hot(dna_seqs):
         seq_length = len(seq)
         one_hot = np.zeros((4,seq_length))
 
-    # The fisrt column is A, second is C, thrid is G, fourth is U or T
+    # The first column is A, second is C, third is G, fourth is U or T
         index = [j for j in range(seq_length) if seq[j] == 'A']
         one_hot[0,index] = 1
         index = [j for j in range(seq_length) if seq[j] == 'C']
@@ -88,29 +89,6 @@ def dna_to_one_hot(dna_seqs):
     return one_hot_seq
 
 
-def split_dataset(one_hot, labels, seed, test_frac = 0.2):
-    """
-    Split the dataset into training and test set
-    """
-    def split_index(num_data, test_frac, seed):
-
-        train_frac = 1 - test_frac
-        cum_index = np.array(np.cumsum([0,train_frac,test_frac])*num_data).astype(int)
-        shuffle = np.random.RandomState(seed=seed).permutation(num_data)
-        train_index = shuffle[cum_index[0]:cum_index[1]]
-        test_index =shuffle[cum_index[1]:cum_index[2]]
-
-        return train_index, test_index
-
-    num_data = len(one_hot)
-    train_index, test_index = split_index(num_data, test_frac, seed)
-    train = (one_hot[train_index],labels[train_index,:])
-    test = (one_hot[test_index],labels[test_index,:])
-    indices = [train_index,test_index]
-
-    return train, test, indices
-
-
 def fasta_data_loader(pro_fa, enh_fa, seed):
 
     pos_f = open(pro_fa)
@@ -125,6 +103,8 @@ def fasta_data_loader(pro_fa, enh_fa, seed):
     one_hot_seq = np.vstack([pos_one_hot, neg_one_hot])
     labels = np.vstack([np.ones((len(pos_one_hot), 1)), np.zeros((len(neg_one_hot), 1))])
 
-    train, test, _ = split_dataset(one_hot_seq, labels, seed, test_frac=0.2)
+    np.random.seed(seed)
+    X_train, X_test, y_train, y_test = train_test_split(one_hot_seq, 
+        labels, test_size=0.2, random_state=seed, stratify=labels)
 
-    return train, test
+    return (X_train, y_train), (X_test, y_test)

@@ -69,7 +69,7 @@ def cnn_model():
     return model
 
 
-def cv_run(X_train, Y_train, X_test, Y_test, n_splits, seed, epochs, batch_size):
+def cv_run(X_train, y_train, X_test, y_test, n_splits, seed, epochs, batch_size):
 
     tf.random.set_seed(seed)
     np.random.seed(seed)
@@ -81,36 +81,36 @@ def cv_run(X_train, Y_train, X_test, Y_test, n_splits, seed, epochs, batch_size)
     test_confusions = []
 
     t1= time.time()
-    for k, (tr_inds, val_inds) in enumerate(kfold.split(X_train, Y_train)):
+    for k, (tr_inds, val_inds) in enumerate(kfold.split(X_train, y_train)):
 
         print('\n---- Fold {} ----'.format(k+1))
         print('{} training, {} validation'.format(len(tr_inds), len(val_inds)))
 
         model = cnn_model()
-        X_tr, Y_tr = X_train[tr_inds], Y_train[tr_inds]
-        X_val, Y_val = X_train[val_inds], Y_train[val_inds]
+        X_tr, y_tr = X_train[tr_inds], y_train[tr_inds]
+        X_val, y_val = X_train[val_inds], y_train[val_inds]
 
-        model.fit(x=X_tr, y=Y_tr, batch_size=batch_size, epochs=epochs, verbose=0)
+        model.fit(x=X_tr, y=y_tr, batch_size=batch_size, epochs=epochs, verbose=0)
 
-        Y_tr_pred = model.predict(X_tr)
-        Y_tr_pred_cat = (np.asarray(Y_tr_pred)).round()
+        y_tr_pred = model.predict(X_tr)
+        y_tr_pred_cat = (np.asarray(y_tr_pred)).round()
 
-        Y_val_pred = model.predict(X_val)
-        Y_val_pred_cat = (np.asarray(Y_val_pred)).round()
+        y_val_pred = model.predict(X_val)
+        y_val_pred_cat = (np.asarray(y_val_pred)).round()
 
         ### Get performance metrics after each fold
-        tr_f1 = f1_score(Y_tr, Y_tr_pred_cat)
+        tr_f1 = f1_score(y_tr, y_tr_pred_cat)
         print("Train F1 = {:.5f}".format(tr_f1))
         tr_f1_scores.append(tr_f1)
 
-        val_f1 = f1_score(Y_val, Y_val_pred_cat)
+        val_f1 = f1_score(y_val, y_val_pred_cat)
         print("Valid F1 = {:.5f}".format(val_f1))
         val_f1_scores.append(val_f1)
 
         ### Run testing after each fold
-        Y_test_pred = model.predict(X_test, batch_size=batch_size).round()
-        confusion = confusion_matrix(Y_test, Y_test_pred)
-        test_f1 = f1_score(Y_test, Y_test_pred)
+        y_test_pred = model.predict(X_test, batch_size=batch_size).round()
+        confusion = confusion_matrix(y_test, y_test_pred)
+        test_f1 = f1_score(y_test, y_test_pred)
         test_f1_scores.append(test_f1)
         test_confusions.append(confusion.tolist())
         print('Test F1 = {:.5f}'.format(test_f1))
@@ -167,13 +167,13 @@ if __name__ == "__main__":
                                         enh_fa='data/{}/promoters.fa'.format(args.cross_cell_line), seed=args.seed)
 
     # Reshape the data to (n_samples, n_seqs, n_channels)
-    X_train, Y_train = train[0].transpose([0,2,1]),train[1]
-    X_test, Y_test = test[0].transpose([0,2,1]),test[1]
+    X_train, y_train = train[0].transpose([0,2,1]), train[1]
+    X_test, y_test = test[0].transpose([0,2,1]), test[1]
 
     print("X_train shape: " + str(X_train.shape))
-    print("Y_train shape: " + str(Y_train.shape))
+    print("y_train shape: " + str(y_train.shape))
     print("X_test shape: " + str(X_test.shape))
-    print("Y_test shape: " + str(Y_test.shape))
+    print("y_test shape: " + str(y_test.shape))
 
     EPOCHS = 40
     BATCH_SIZE = 30
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     train_size = X_train.shape[0] - val_size
     test_size = X_test.shape[0]
 
-    stats = cv_run(X_train, Y_train, X_test, Y_test, n_splits=N_SPLITS,
+    stats = cv_run(X_train, y_train, X_test, y_test, n_splits=N_SPLITS,
                    seed=args.seed, epochs=EPOCHS, batch_size=BATCH_SIZE)
 
     ### LOGS
