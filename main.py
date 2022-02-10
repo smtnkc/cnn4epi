@@ -112,29 +112,30 @@ def cv_run(X_train, Y_train, X_test, Y_test, n_splits, seed, epochs, batch_size)
         confusion = confusion_matrix(Y_test, Y_test_pred)
         test_f1 = f1_score(Y_test, Y_test_pred)
         test_f1_scores.append(test_f1)
-        test_confusions.append(confusion)
+        test_confusions.append(confusion.tolist())
         print('Test F1 = {:.5f}'.format(test_f1))
         print('Test confusion = {}'.format(confusion.tolist()))
 
     t2= time.time()
     total_exec_time = t2 - t1
-    mean_tr_f1 = np.mean(tr_f1_scores)
-    mean_val_f1 = np.mean(val_f1_scores)
-    mean_test_f1 = np.mean(test_f1_scores)
-    mean_test_conf = np.mean(test_confusions, axis=0)
+    median_tr_f1 = np.median(tr_f1_scores)
+    median_val_f1 = np.median(val_f1_scores)
+    median_test_f1 = np.median(test_f1_scores)
+    median_test_conf = np.median(test_confusions, axis=0)
 
     print('{}\nTotal Execution Time = {:.5f} seconds'.format('-'*20, total_exec_time))
-    print('Mean Train F1 score = {:.5f}'.format(mean_tr_f1))
-    print('Mean Val F1 score = {:.5f}'.format(mean_val_f1))
-    print('Mean Test F1 score = {:.5f}'.format(mean_test_f1))
-    print('Mean Test Confusion = {}\n{}\n'.format(np.mean(test_confusions, axis=0).tolist(), '-'*20))
+    print('Median Train F1 score = {:.5f}'.format(median_tr_f1))
+    print('Median Val F1 score = {:.5f}'.format(median_val_f1))
+    print('Median Test F1 score = {:.5f}'.format(median_test_f1))
+    print('Median Test Confusion = {}\n{}\n'.format(np.median(test_confusions, axis=0).tolist(), '-'*20))
 
     stats = {
         'time' : total_exec_time,
-        'tr_f1': mean_tr_f1,
-        'val_f1': mean_val_f1,
-        'test_f1': mean_test_f1,
-        'test_conf': mean_test_conf
+        'tr_f1': median_tr_f1,
+        'val_f1': median_val_f1,
+        'test_f1': median_test_f1,
+        'test_conf': median_test_conf,
+        'test_conf_all': test_confusions
     }
     return stats
 
@@ -209,7 +210,10 @@ if __name__ == "__main__":
     logging.info("Train epochs               = {}".format(EPOCHS))
     logging.info("Train batch size           = {}".format(BATCH_SIZE))
     logging.info("Total Execution Time       = {:.5f}".format(stats['time']))
-    logging.info("Mean Train F1              = {:.5f}".format(stats['tr_f1']))
-    logging.info("Mean Validation F1         = {:.5f}".format(stats['val_f1']))
-    logging.info("Mean Test F1               = {:.5f}".format(stats['test_f1']))
-    logging.info("Mean Test Confusion        = {}".format(stats['test_conf'].tolist()))
+    logging.info("Median Train F1            = {:.5f}".format(stats['tr_f1']))
+    logging.info("Median Validation F1       = {:.5f}".format(stats['val_f1']))
+    logging.info("Median Test F1             = {:.5f}".format(stats['test_f1']))
+    test_cm = stats['test_conf_all']
+    for i, cm in enumerate(test_cm):
+        logging.info("Test Confusions (Fold {})   = {}".format(i+1, cm))
+    logging.info("Median Test Confusion      = {}".format(stats['test_conf'].tolist()))
