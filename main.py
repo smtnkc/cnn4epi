@@ -192,7 +192,7 @@ if __name__ == "__main__":
     if not os.path.isdir(log_dir):
         os.makedirs(log_dir)
 
-    if args.cross_cell_line == None or args.cross_cell_line == args.cell_line:
+    if args.cross_cell_line == None:
         log_name = '{}/{}'.format(log_dir, args.cell_line)
     else:
         log_name = '{}/{}'.format(log_dir, args.cell_line + '_' + args.cross_cell_line)
